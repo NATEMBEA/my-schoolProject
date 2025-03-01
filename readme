@@ -1,0 +1,1603 @@
+Creating a full-fledged job posting platform with user roles, notifications, chat functionality, and a modernized dashboard is a complex task. Below is a simplified version of the system using HTML, CSS, JavaScript, and PHP. This example assumes you have a basic understanding of these technologies and a local development environment set up (e.g., XAMPP, WAMP, or MAMP).
+
+File Structure
+Copy
+/project
+│
+├── index.php          (Homepage)
+├── dashboard.php      (Dashboard for clients/developers)
+├── post_job.php       (Form to post a job)
+├── apply_job.php      (Form to apply for a job)
+├── chat.php           (Chat interface)
+├── notifications.php  (Notifications page)
+├── delete_job.php     (Logic to delete a job)
+├── styles.css         (CSS for styling)
+├── script.js          (JavaScript for interactivity)
+├── db.php             (Database connection)
+└── /includes          (Folder for reusable PHP code)
+    ├── header.php     (Header for all pages)
+    ├── footer.php     (Footer for all pages)
+    └── auth.php      (Authentication and role-checking logic)
+Database Schema
+Create a MySQL database named job_platform and the following tables:
+
+sql
+Copy
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    role ENUM('client', 'developer') NOT NULL
+);
+
+CREATE TABLE jobs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    client_id INT NOT NULL,
+    title VARCHAR(100) NOT NULL,
+    description TEXT NOT NULL,
+    posted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE applications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    job_id INT NOT NULL,
+    developer_id INT NOT NULL,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+    FOREIGN KEY (developer_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    sender_id INT NOT NULL,
+    receiver_id INT NOT NULL,
+    message TEXT NOT NULL,
+    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+);
+Code Implementation
+1. db.php (Database Connection)
+php
+Copy
+<?php
+$host = 'localhost';
+$db = 'job_platform';
+$user = 'root';
+$pass = '';
+
+$conn = new mysqli($host, $user, $pass, $db);
+
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+?>
+2. auth.php (Authentication and Role Checking)
+php
+Copy
+<?php
+session_start();
+
+if (!isset($_SESSION['user_id'])) {
+    header('Location: index.php');
+    exit();
+}
+
+function isClient() {
+    return $_SESSION['role'] === 'client';
+}
+
+function isDeveloper() {
+    return $_SESSION['role'] === 'developer';
+}
+?>
+3. post_job.php (Job Posting Form)
+php
+Copy
+<?php
+include 'includes/auth.php';
+include 'db.php';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $title = $_POST['title'];
+    $description = $_POST['description'];
+    $client_id = $_SESSION['user_id'];
+
+    $stmt = $conn->prepare("INSERT INTO jobs (client_id, title, description) VALUES (?, ?, ?)");
+    $stmt->bind_param("iss", $client_id, $title, $description);
+    $stmt->execute();
+    $stmt->close();
+
+    header('Location: dashboard.php');
+    exit();
+}
+?>
+
+<form method="POST" action="post_job.php">
+    <input type="text" name="title" placeholder="Job Title" required>
+    <textarea name="description" placeholder="Job Description" required></textarea>
+    <button type="submit">Post Job</button>
+</form>
+4. delete_job.php (Job Deletion Logic)
+php
+Copy
+<?php
+include 'includes/auth.php';
+include 'db.php';
+
+$job_id = $_GET['id'];
+$user_id = $_SESSION['user_id'];
+$role = $_SESSION['role'];
+
+if ($role === 'client') {
+    $stmt = $conn->prepare("DELETE FROM jobs WHERE id = ? AND client_id = ?");
+    $stmt->bind_param("ii", $job_id, $user_id);
+} elseif ($role === 'developer') {
+    $stmt = $conn->prepare("DELETE FROM applications WHERE job_id = ? AND developer_id = ?");
+    $stmt->bind_param("ii", $job_id, $user_id);
+}
+
+$stmt->execute();
+$stmt->close();
+
+header('Location: dashboard.php');
+exit();
+?>
+5. chat.php (Chat Interface)
+php
+Copy
+<?php
+include 'includes/auth.php';
+include 'db.php';
+
+$receiver_id = $_GET['receiver_id'];
+$user_id = $_SESSION['user_id'];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $message = $_POST['message'];
+
+    $stmt = $conn->prepare("INSERT INTO messages (sender_id, receiver_id, message) VALUES (?, ?, ?)");
+    $stmt->bind_param("iis", $user_id, $receiver_id, $message);
+    $stmt->execute();
+    $stmt->close();
+}
+
+$stmt = $conn->prepare("SELECT * FROM messages WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?) ORDER BY sent_at ASC");
+$stmt->bind_param("iiii", $user_id, $receiver_id, $receiver_id, $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+?>
+
+<div id="chat-box">
+    <?php while ($row = $result->fetch_assoc()): ?>
+        <div class="message <?= $row['sender_id'] === $user_id ? 'sent' : 'received' ?>">
+            <?= htmlspecialchars($row['message']) ?>
+        </div>
+    <?php endwhile; ?>
+</div>
+
+<form method="POST" action="chat.php?receiver_id=<?= $receiver_id ?>">
+    <textarea name="message" placeholder="Type your message..." required></textarea>
+    <button type="submit">Send</button>
+</form>
+6. styles.css (Modern Dashboard Styling)
+css
+Copy
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f9;
+    margin: 0;
+    padding: 0;
+}
+
+.dashboard {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+}
+
+.card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    margin: 10px;
+    width: 80%;
+    max-width: 600px;
+}
+
+button {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #0056b3;
+}
+7. script.js (JavaScript for Interactivity)
+javascript
+Copy
+// Add interactivity like dynamic notifications or chat updates
+document.addEventListener('DOMContentLoaded', () => {
+    // Example: Fetch notifications dynamically
+    fetch('notifications.php')
+        .then(response => response.text())
+        .then(data => {
+            document.getElementById('notifications').innerHTML = data;
+        });
+});
+Final Notes
+This is a basic implementation. For a production-ready system, you need to:
+
+Add proper input validation and sanitization.
+
+Implement user authentication (e.g., password hashing).
+
+Use AJAX for real-time chat and notifications.
+
+Secure the application against SQL injection, XSS, and CSRF attacks.
+
+Use a modern frontend framework like React or Vue.js for a more dynamic UI.
+
+Let me know if you need further assistance!
+
+dashboard.php      (Dashboard for clients/developers)
+Below is the implementation of dashboard.php, which serves as the main dashboard for both clients and developers. The dashboard will display different content based on the user's role (client or developer). Clients can view their posted jobs, delete jobs, and access chat functionality. Developers can view available jobs, apply for jobs, and access chat functionality.
+
+dashboard.php
+php
+Copy
+<?php
+// Include authentication and database connection
+include 'includes/auth.php';
+include 'db.php';
+
+// Fetch user details
+$user_id = $_SESSION['user_id'];
+$role = $_SESSION['role'];
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="dashboard">
+        <h1>Welcome, <?= $_SESSION['username'] ?>!</h1>
+        <p>Role: <?= ucfirst($role) ?></p>
+
+        <!-- Navigation Links -->
+        <nav>
+            <a href="post_job.php">Post a Job</a> |
+            <a href="notifications.php">Notifications</a> |
+            <a href="chat.php">Chat</a> |
+            <a href="logout.php">Logout</a>
+        </nav>
+
+        <!-- Display Jobs -->
+        <div class="card">
+            <h2><?= $role === 'client' ? 'Your Posted Jobs' : 'Available Jobs' ?></h2>
+            <?php
+            if ($role === 'client') {
+                // Fetch jobs posted by the client
+                $stmt = $conn->prepare("SELECT * FROM jobs WHERE client_id = ?");
+                $stmt->bind_param("i", $user_id);
+            } else {
+                // Fetch all available jobs for developers
+                $stmt = $conn->prepare("SELECT * FROM jobs");
+            }
+            $stmt->execute();
+            $result = $stmt->get_result();
+
+            if ($result->num_rows > 0) {
+                while ($row = $result->fetch_assoc()) {
+                    echo "<div class='job'>";
+                    echo "<h3>" . htmlspecialchars($row['title']) . "</h3>";
+                    echo "<p>" . htmlspecialchars($row['description']) . "</p>";
+                    echo "<p>Posted on: " . $row['posted_at'] . "</p>";
+
+                    if ($role === 'client') {
+                        // Clients can delete their jobs
+                        echo "<a href='delete_job.php?id=" . $row['id'] . "' class='delete-btn'>Delete Job</a>";
+                    } else {
+                        // Developers can apply for jobs
+                        echo "<a href='apply_job.php?job_id=" . $row['id'] . "' class='apply-btn'>Apply for Job</a>";
+                    }
+
+                    echo "</div>";
+                }
+            } else {
+                echo "<p>No jobs found.</p>";
+            }
+            $stmt->close();
+            ?>
+        </div>
+
+        <!-- Display Applications (for clients) -->
+        <?php if ($role === 'client'): ?>
+            <div class="card">
+                <h2>Job Applications</h2>
+                <?php
+                $stmt = $conn->prepare("
+                    SELECT applications.id, jobs.title, users.username 
+                    FROM applications 
+                    JOIN jobs ON applications.job_id = jobs.id 
+                    JOIN users ON applications.developer_id = users.id 
+                    WHERE jobs.client_id = ?
+                ");
+                $stmt->bind_param("i", $user_id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+
+                if ($result->num_rows > 0) {
+                    while ($row = $result->fetch_assoc()) {
+                        echo "<div class='application'>";
+                        echo "<h3>Job: " . htmlspecialchars($row['title']) . "</h3>";
+                        echo "<p>Applicant: " . htmlspecialchars($row['username']) . "</p>";
+                        echo "<a href='chat.php?receiver_id=" . $row['id'] . "' class='chat-btn'>Chat with Applicant</a>";
+                        echo "</div>";
+                    }
+                } else {
+                    echo "<p>No applications found.</p>";
+                }
+                $stmt->close();
+                ?>
+            </div>
+        <?php endif; ?>
+
+        <!-- Display Applied Jobs (for developers) -->
+        <?php if ($role === 'developer'): ?>
+            <div class="card">
+                <h2>Your Applied Jobs</h2>
+                <?php
+                $stmt = $conn->prepare("
+                    SELECT jobs.title, jobs.description, applications.applied_at 
+                    FROM applications 
+                    JOIN jobs ON applications.job_id = jobs.id 
+                    WHERE applications.developer_id = ?
+                ");
+                $stmt->bind_param("i", $user_id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+
+                if ($result->num_rows > 0) {
+                    while ($row = $result->fetch_assoc()) {
+                        echo "<div class='job'>";
+                        echo "<h3>" . htmlspecialchars($row['title']) . "</h3>";
+                        echo "<p>" . htmlspecialchars($row['description']) . "</p>";
+                        echo "<p>Applied on: " . $row['applied_at'] . "</p>";
+                        echo "</div>";
+                    }
+                } else {
+                    echo "<p>You haven't applied to any jobs yet.</p>";
+                }
+                $stmt->close();
+                ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</body>
+</html>
+Explanation of the Code
+Role-Based Content:
+
+If the user is a client, they can:
+
+View their posted jobs.
+
+Delete their posted jobs.
+
+View job applications and chat with applicants.
+
+If the user is a developer, they can:
+
+View all available jobs.
+
+Apply for jobs.
+
+View jobs they have applied to.
+
+Navigation Links:
+
+Links to post jobs, view notifications, access the chat, and logout.
+
+Styling:
+
+Uses the styles.css file for a modern, card-based layout.
+
+Database Queries:
+
+Fetches jobs and applications based on the user's role.
+
+Security:
+
+Uses prepared statements to prevent SQL injection.
+
+Escapes output using htmlspecialchars to prevent XSS attacks.
+
+styles.css (Additional Styling for Dashboard)
+css
+Copy
+.dashboard {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.job, .application {
+    border-bottom: 1px solid #eee;
+    padding: 15px 0;
+}
+
+.job:last-child, .application:last-child {
+    border-bottom: none;
+}
+
+.delete-btn, .apply-btn, .chat-btn {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 8px 16px;
+    background: #007bff;
+    color: white;
+    text-decoration: none;
+    border-radius: 5px;
+}
+
+.delete-btn:hover, .apply-btn:hover, .chat-btn:hover {
+    background: #0056b3;
+}
+
+nav {
+    margin-bottom: 20px;
+}
+
+nav a {
+    margin-right: 10px;
+    color: #007bff;
+    text-decoration: none;
+}
+
+nav a:hover {
+    text-decoration: underline;
+}
+How It Works
+Clients:
+
+Can post jobs, view their posted jobs, and delete them.
+
+Can view applications and chat with developers who applied.
+
+Developers:
+
+Can view all available jobs and apply for them.
+
+Can view jobs they have applied to.
+
+Chat:
+
+Both clients and developers can access the chat interface to communicate.
+
+This implementation provides a functional and modernized dashboard. You can further enhance it by adding real-time notifications, improving the chat system, and integrating a frontend framework like React or Vue.js for a more dynamic experience. Let me know if you need help with any specific feature!
+
+index.php          (Homepage)
+The index.php file serves as the homepage of your job platform. It will include a login and registration form for users to access the platform. Below is the implementation:
+
+index.php
+php
+Copy
+<?php
+session_start();
+include 'db.php';
+
+// Redirect logged-in users to the dashboard
+if (isset($_SESSION['user_id'])) {
+    header('Location: dashboard.php');
+    exit();
+}
+
+// Handle login
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+
+    $stmt = $conn->prepare("SELECT id, username, password, role FROM users WHERE username = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows === 1) {
+        $user = $result->fetch_assoc();
+        if (password_verify($password, $user['password'])) {
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['username'] = $user['username'];
+            $_SESSION['role'] = $user['role'];
+            header('Location: dashboard.php');
+            exit();
+        } else {
+            $login_error = "Invalid username or password.";
+        }
+    } else {
+        $login_error = "Invalid username or password.";
+    }
+    $stmt->close();
+}
+
+// Handle registration
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register'])) {
+    $username = $_POST['username'];
+    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+    $role = $_POST['role'];
+
+    $stmt = $conn->prepare("INSERT INTO users (username, password, role) VALUES (?, ?, ?)");
+    $stmt->bind_param("sss", $username, $password, $role);
+    if ($stmt->execute()) {
+        $registration_success = "Registration successful! Please log in.";
+    } else {
+        $registration_error = "Registration failed. Please try again.";
+    }
+    $stmt->close();
+}
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Platform - Home</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to the Job Platform</h1>
+
+        <!-- Login Form -->
+        <div class="form-container">
+            <h2>Login</h2>
+            <?php if (isset($login_error)): ?>
+                <p class="error"><?= $login_error ?></p>
+            <?php endif; ?>
+            <form method="POST" action="index.php">
+                <input type="text" name="username" placeholder="Username" required>
+                <input type="password" name="password" placeholder="Password" required>
+                <button type="submit" name="login">Login</button>
+            </form>
+        </div>
+
+        <!-- Registration Form -->
+        <div class="form-container">
+            <h2>Register</h2>
+            <?php if (isset($registration_success)): ?>
+                <p class="success"><?= $registration_success ?></p>
+            <?php endif; ?>
+            <?php if (isset($registration_error)): ?>
+                <p class="error"><?= $registration_error ?></p>
+            <?php endif; ?>
+            <form method="POST" action="index.php">
+                <input type="text" name="username" placeholder="Username" required>
+                <input type="password" name="password" placeholder="Password" required>
+                <select name="role" required>
+                    <option value="client">Client</option>
+                    <option value="developer">Developer</option>
+                </select>
+                <button type="submit" name="register">Register</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
+Explanation of the Code
+Session Handling:
+
+If a user is already logged in ($_SESSION['user_id'] is set), they are redirected to the dashboard.
+
+Login Logic:
+
+The login form submits to the same page (index.php).
+
+The username and password are validated against the database.
+
+If the credentials are correct, the user is logged in and redirected to the dashboard.
+
+Registration Logic:
+
+The registration form allows users to sign up as either a client or a developer.
+
+Passwords are hashed using password_hash() for security.
+
+After successful registration, a success message is displayed.
+
+Error Handling:
+
+Errors (e.g., invalid login or registration failure) are displayed to the user.
+
+Styling:
+
+The styles.css file is used to style the forms and layout.
+
+styles.css (Styling for the Homepage)
+css
+Copy
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f9;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.container {
+    text-align: center;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    max-width: 400px;
+    width: 100%;
+}
+
+h1 {
+    margin-bottom: 20px;
+    color: #333;
+}
+
+.form-container {
+    margin-bottom: 20px;
+}
+
+h2 {
+    margin-bottom: 10px;
+    color: #555;
+}
+
+input, select, button {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 16px;
+}
+
+button {
+    background: #007bff;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #0056b3;
+}
+
+.error {
+    color: red;
+    margin-bottom: 10px;
+}
+
+.success {
+    color: green;
+    margin-bottom: 10px;
+}
+How It Works
+Login:
+
+Users enter their username and password.
+
+If the credentials are correct, they are logged in and redirected to the dashboard.
+
+Registration:
+
+Users can register as either a client or a developer.
+
+After registration, they are prompted to log in.
+
+Styling:
+
+The page is styled with a clean, modern design using CSS.
+
+Next Steps
+Add email verification during registration.
+
+Implement password recovery functionality.
+
+Enhance the UI with animations or a frontend framework like Bootstrap.
+
+Let me know if you need further assistance!
+
+logout.php
+The logout.php file is responsible for logging out the user by destroying the session and redirecting them to the homepage (index.php). Below is the implementation:
+
+logout.php
+php
+Copy
+<?php
+// Start the session
+session_start();
+
+// Unset all session variables
+$_SESSION = array();
+
+// Destroy the session
+session_destroy();
+
+// Redirect to the homepage
+header('Location: index.php');
+exit();
+?>
+Explanation of the Code
+Session Handling:
+
+session_start(): Starts the session (if not already started).
+
+$_SESSION = array(): Clears all session variables.
+
+session_destroy(): Destroys the session completely.
+
+Redirection:
+
+After destroying the session, the user is redirected to the homepage (index.php) using the header() function.
+
+Security:
+
+This ensures that the user is properly logged out and cannot access protected pages without logging in again.
+
+How It Works
+When a user clicks on the "Logout" link (e.g., in the dashboard), they are directed to logout.php.
+
+The session is destroyed, and the user is redirected to the homepage.
+
+Integration with Dashboard
+In your dashboard.php, you can add a logout link like this:
+
+php
+Copy
+<a href="logout.php">Logout</a>
+This link will trigger the logout process when clicked.
+
+Example Usage
+Dashboard Navigation:
+
+php
+Copy
+<nav>
+    <a href="post_job.php">Post a Job</a> |
+    <a href="notifications.php">Notifications</a> |
+    <a href="chat.php">Chat</a> |
+    <a href="logout.php">Logout</a>
+</nav>
+User Experience:
+
+When the user clicks "Logout," they are logged out and redirected to the homepage.
+
+Security Considerations
+Always use session_start() at the beginning of any PHP file that interacts with sessions.
+
+Use session_destroy() to ensure the session is completely terminated.
+
+Redirect users after logout to prevent them from accessing restricted pages.
+
+Let me know if you need further assistance!
+
+the apply job button  from developer side doesnot respond
+If the "Apply Job" button on the developer side is not responding, there could be several reasons for this issue. Below, I'll guide you through debugging and fixing the problem step by step.
+
+Possible Causes
+JavaScript Errors:
+
+If the button relies on JavaScript, there might be an error in the script preventing it from working.
+
+Form Submission Issue:
+
+If the button is part of a form, the form might not be submitting correctly.
+
+Broken Link:
+
+The href or action attribute of the button might be incorrect or missing.
+
+PHP Logic Issue:
+
+The apply_job.php file might have errors or might not be processing the request correctly.
+
+Database Issue:
+
+The database query might be failing due to incorrect data or missing records.
+
+Step-by-Step Debugging
+1. Check the Button HTML
+Ensure the "Apply Job" button is correctly defined in the HTML. For example:
+
+html
+Copy
+<a href="apply_job.php?job_id=<?= $row['id'] ?>" class="apply-btn">Apply for Job</a>
+Run HTML
+Verify that $row['id'] contains the correct job ID.
+
+Ensure the href attribute points to the correct file (apply_job.php).
+
+2. Check the apply_job.php File
+Ensure the apply_job.php file exists and is correctly handling the job application. Here's an example implementation:
+
+php
+Copy
+<?php
+session_start();
+include 'includes/auth.php'; // Ensure the user is logged in
+include 'db.php';
+
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'developer') {
+    header('Location: index.php');
+    exit();
+}
+
+if (isset($_GET['job_id'])) {
+    $job_id = $_GET['job_id'];
+    $developer_id = $_SESSION['user_id'];
+
+    // Check if the developer has already applied for this job
+    $stmt = $conn->prepare("SELECT * FROM applications WHERE job_id = ? AND developer_id = ?");
+    $stmt->bind_param("ii", $job_id, $developer_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows === 0) {
+        // Insert the application into the database
+        $stmt = $conn->prepare("INSERT INTO applications (job_id, developer_id) VALUES (?, ?)");
+        $stmt->bind_param("ii", $job_id, $developer_id);
+        if ($stmt->execute()) {
+            $_SESSION['message'] = "Application submitted successfully!";
+        } else {
+            $_SESSION['error'] = "Failed to submit application. Please try again.";
+        }
+    } else {
+        $_SESSION['error'] = "You have already applied for this job.";
+    }
+
+    $stmt->close();
+}
+
+header('Location: dashboard.php');
+exit();
+?>
+3. Check for JavaScript Errors
+If the button relies on JavaScript, open the browser's developer console (usually by pressing F12) and check for any errors. For example:
+
+javascript
+Copy
+document.querySelector('.apply-btn').addEventListener('click', function (e) {
+    e.preventDefault();
+    const jobId = this.dataset.jobId;
+    fetch(`apply_job.php?job_id=${jobId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Application submitted successfully!');
+            } else {
+                alert('Failed to submit application.');
+            }
+        })
+        .catch(error => console.error('Error:', error));
+});
+Ensure the JavaScript code is correctly linked and executed.
+
+Check for any errors in the console.
+
+4. Check Database Connection and Queries
+Ensure the database connection is working and the queries are correct. For example:
+
+Verify that the applications table exists and has the correct structure.
+
+Ensure the job_id and developer_id values are valid.
+
+5. Debugging with var_dump() or echo
+Add debugging statements to apply_job.php to check if the script is being executed and if the data is being passed correctly. For example:
+
+php
+Copy
+var_dump($_GET); // Check if job_id is being passed
+var_dump($_SESSION); // Check if user_id and role are correct
+6. Check for Redirects
+Ensure the header('Location: dashboard.php'); redirect is working correctly and not causing issues.
+
+Final Fixes
+Updated "Apply Job" Button
+Ensure the button is correctly linked to apply_job.php with the correct job_id:
+
+php
+Copy
+<a href="apply_job.php?job_id=<?= $row['id'] ?>" class="apply-btn">Apply for Job</a>
+Updated apply_job.php
+Ensure the file handles the application logic correctly:
+
+php
+Copy
+<?php
+session_start();
+include 'includes/auth.php'; // Ensure the user is logged in
+include 'db.php';
+
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'developer') {
+    header('Location: index.php');
+    exit();
+}
+
+if (isset($_GET['job_id'])) {
+    $job_id = $_GET['job_id'];
+    $developer_id = $_SESSION['user_id'];
+
+    // Check if the developer has already applied for this job
+    $stmt = $conn->prepare("SELECT * FROM applications WHERE job_id = ? AND developer_id = ?");
+    $stmt->bind_param("ii", $job_id, $developer_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows === 0) {
+        // Insert the application into the database
+        $stmt = $conn->prepare("INSERT INTO applications (job_id, developer_id) VALUES (?, ?)");
+        $stmt->bind_param("ii", $job_id, $developer_id);
+        if ($stmt->execute()) {
+            $_SESSION['message'] = "Application submitted successfully!";
+        } else {
+            $_SESSION['error'] = "Failed to submit application. Please try again.";
+        }
+    } else {
+        $_SESSION['error'] = "You have already applied for this job.";
+    }
+
+    $stmt->close();
+}
+
+header('Location: dashboard.php');
+exit();
+?>
+Testing
+Log in as a developer.
+
+Click the "Apply Job" button on a job listing.
+
+Check the database to ensure the application was recorded.
+
+Verify that the user is redirected to the dashboard and sees a success/error message.
+
+If the issue persists, let me know, and we can dive deeper into debugging!
+
+├── apply_job.php      (Form to apply for a job)
+The apply_job.php file is responsible for handling the logic when a developer applies for a job. It should validate the user's role, check if they have already applied for the job, and insert the application into the database if everything is valid. Below is the implementation of apply_job.php:
+
+apply_job.php
+php
+Copy
+<?php
+// Start the session and include necessary files
+session_start();
+include 'includes/auth.php'; // Ensure the user is logged in
+include 'db.php'; // Database connection
+
+// Redirect if the user is not a developer
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'developer') {
+    header('Location: index.php');
+    exit();
+}
+
+// Check if the job ID is provided in the URL
+if (isset($_GET['job_id'])) {
+    $job_id = $_GET['job_id'];
+    $developer_id = $_SESSION['user_id'];
+
+    // Check if the developer has already applied for this job
+    $stmt = $conn->prepare("SELECT * FROM applications WHERE job_id = ? AND developer_id = ?");
+    $stmt->bind_param("ii", $job_id, $developer_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows === 0) {
+        // Insert the application into the database
+        $stmt = $conn->prepare("INSERT INTO applications (job_id, developer_id) VALUES (?, ?)");
+        $stmt->bind_param("ii", $job_id, $developer_id);
+        if ($stmt->execute()) {
+            $_SESSION['message'] = "Application submitted successfully!";
+        } else {
+            $_SESSION['error'] = "Failed to submit application. Please try again.";
+        }
+    } else {
+        $_SESSION['error'] = "You have already applied for this job.";
+    }
+
+    $stmt->close();
+} else {
+    $_SESSION['error'] = "Invalid job ID.";
+}
+
+// Redirect back to the dashboard
+header('Location: dashboard.php');
+exit();
+?>
+Explanation of the Code
+Session and Role Validation:
+
+The script starts by checking if the user is logged in and has the role of a developer. If not, they are redirected to the homepage.
+
+Job ID Validation:
+
+The script checks if the job_id is provided in the URL ($_GET['job_id']). If not, an error message is set, and the user is redirected.
+
+Duplicate Application Check:
+
+The script checks if the developer has already applied for the job by querying the applications table.
+
+Insert Application:
+
+If the developer hasn't applied for the job, the application is inserted into the applications table.
+
+Redirect with Messages:
+
+After processing, the user is redirected back to the dashboard with a success or error message stored in the session.
+
+Integration with Dashboard
+In your dashboard.php, ensure the "Apply Job" button links to apply_job.php with the correct job_id. For example:
+
+php
+Copy
+<a href="apply_job.php?job_id=<?= $row['id'] ?>" class="apply-btn">Apply for Job</a>
+Handling Messages in dashboard.php
+Add the following code to dashboard.php to display success or error messages:
+
+php
+Copy
+<?php
+if (isset($_SESSION['message'])) {
+    echo "<p class='success'>" . $_SESSION['message'] . "</p>";
+    unset($_SESSION['message']);
+}
+if (isset($_SESSION['error'])) {
+    echo "<p class='error'>" . $_SESSION['error'] . "</p>";
+    unset($_SESSION['error']);
+}
+?>
+Styling for Messages
+Add the following CSS to styles.css to style the messages:
+
+css
+Copy
+.success {
+    color: green;
+    background-color: #e6ffe6;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+}
+
+.error {
+    color: red;
+    background-color: #ffe6e6;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+}
+Testing
+Log in as a developer.
+
+Go to the dashboard and click the "Apply for Job" button on a job listing.
+
+Check the following:
+
+If the application is successful, a success message should appear.
+
+If the developer has already applied, an error message should appear.
+
+If the job_id is invalid, an error message should appear.
+
+Debugging Tips
+Check the URL:
+
+Ensure the job_id is being passed correctly in the URL (e.g., apply_job.php?job_id=1).
+
+Check the Database:
+
+Verify that the applications table is being updated correctly.
+
+Check for Errors:
+
+Open the browser's developer console (press F12) and check for any JavaScript or network errors.
+
+Add Debugging Statements:
+
+Use var_dump() or echo to debug variables and ensure the logic is working as expected.
+
+If you encounter any specific issues, let me know, and I can help you troubleshoot further!
+
+how can i test this to different laptop to see if it works
+To test your application on a different laptop, you need to ensure that the application is accessible over a network or the internet. Here’s a step-by-step guide to help you set up and test your application on another laptop:
+
+Step 1: Set Up a Local Server
+If you’re using a local server like XAMPP, WAMP, or MAMP, follow these steps:
+
+Install a Local Server:
+
+Install XAMPP, WAMP, or MAMP on the laptop where your application is hosted.
+
+Place your project folder in the htdocs (for XAMPP/WAMP) or www (for MAMP) directory.
+
+Start the Server:
+
+Launch XAMPP/WAMP/MAMP and start the Apache and MySQL services.
+
+Access the Application Locally:
+
+Open a browser on the same laptop and go to http://localhost/your-project-folder to ensure the application is running.
+
+Step 2: Make the Application Accessible Over the Network
+To allow another laptop to access your application, you need to make your local server accessible over the network.
+
+For XAMPP/WAMP/MAMP:
+Find Your IP Address:
+
+On the laptop hosting the application, find its local IP address.
+
+On Windows: Open Command Prompt and type ipconfig. Look for the IPv4 Address under your active network connection.
+
+On macOS/Linux: Open Terminal and type ifconfig. Look for the inet address under your active network connection.
+
+Configure Apache to Allow Remote Access:
+
+Open the Apache configuration file:
+
+For XAMPP: C:\xampp\apache\conf\httpd.conf
+
+For WAMP: C:\wamp\bin\apache\apacheX.X.X\conf\httpd.conf
+
+For MAMP: /Applications/MAMP/conf/apache/httpd.conf
+
+Find the line:
+
+apache
+Copy
+Listen 80
+Change it to:
+
+apache
+Copy
+Listen 0.0.0.0:80
+Find the section:
+
+apache
+Copy
+<Directory />
+    Options FollowSymLinks
+    AllowOverride None
+    Order deny,allow
+    Deny from all
+</Directory>
+Change Deny from all to:
+
+apache
+Copy
+Allow from all
+Restart Apache:
+
+Restart the Apache server from the XAMPP/WAMP/MAMP control panel.
+
+Access the Application from Another Laptop:
+
+On the other laptop, open a browser and go to http://<host-laptop-ip>/your-project-folder.
+
+Replace <host-laptop-ip> with the IP address of the laptop hosting the application.
+
+Step 3: Test the Application
+Log In as a Client:
+
+Register or log in as a client and test posting a job, deleting a job, and chatting with a developer.
+
+Log In as a Developer:
+
+Register or log in as a developer and test applying for a job, deleting applications, and chatting with a client.
+
+Check for Errors:
+
+Ensure all functionalities work as expected.
+
+Check the browser console for JavaScript errors and the server logs for PHP errors.
+
+Step 4: Debugging Tips
+Check Network Connectivity:
+
+Ensure both laptops are connected to the same network (e.g., the same Wi-Fi).
+
+Firewall Settings:
+
+On the laptop hosting the application, ensure the firewall allows incoming connections on port 80 (HTTP).
+
+Database Connection:
+
+If the database connection fails on the other laptop, ensure the database credentials in db.php are correct and the MySQL server is running.
+
+Cross-Browser Testing:
+
+Test the application on different browsers (e.g., Chrome, Firefox, Edge) to ensure compatibility.
+
+Alternative: Deploy to a Live Server
+If you want to test the application on a live server (accessible over the internet), you can deploy it to a hosting service like:
+
+Free Hosting:
+
+Use free hosting services like 000webhost or InfinityFree.
+
+Paid Hosting:
+
+Use services like Bluehost, HostGator, or DigitalOcean.
+
+Deployment Steps:
+
+Upload your project files to the server using FTP or a file manager.
+
+Import your database to the server’s MySQL or MariaDB.
+
+Update the db.php file with the server’s database credentials.
+
+Access the application via the server’s domain or IP address.
+
+Step 5: Share the Application
+Once the application is accessible over the network or internet, share the URL or IP address with others to test it on their devices.
+
+By following these steps, you can test your application on different laptops and ensure it works as expected. Let me know if you encounter any issues!
+
+http://<host-laptop-ip>/your-project-folder
+When you access your application using a URL like http://<host-laptop-ip>/your-project-folder, you're trying to access a web application hosted on a local server (e.g., XAMPP, WAMP, or MAMP) from another device on the same network. Here's a detailed explanation of how this works and how to troubleshoot if it doesn't:
+
+What Does http://<host-laptop-ip>/your-project-folder Mean?
+<host-laptop-ip>:
+
+This is the local IP address of the laptop hosting the application.
+
+Example: 192.168.1.100 (replace this with the actual IP address of the hosting laptop).
+
+your-project-folder:
+
+This is the folder name where your project is located inside the htdocs (XAMPP/WAMP) or www (MAMP) directory.
+
+Example: If your project folder is named job-platform, the URL would be http://192.168.1.100/job-platform.
+
+Steps to Access the Application
+1. Find the Host Laptop's IP Address
+On the laptop hosting the application:
+
+Windows: Open Command Prompt and type ipconfig. Look for the IPv4 Address under your active network connection.
+
+macOS/Linux: Open Terminal and type ifconfig. Look for the inet address under your active network connection.
+
+2. Ensure the Application is Running Locally
+On the hosting laptop, open a browser and go to http://localhost/your-project-folder.
+
+Verify that the application loads correctly.
+
+3. Allow Remote Access to the Local Server
+Configure your local server (XAMPP/WAMP/MAMP) to allow connections from other devices on the network.
+
+Follow the steps in the previous response to modify the Apache configuration file.
+
+4. Access the Application from Another Laptop
+On the other laptop, open a browser and go to http://<host-laptop-ip>/your-project-folder.
+
+Example: If the hosting laptop's IP is 192.168.1.100 and the project folder is job-platform, the URL would be http://192.168.1.100/job-platform.
+
+Common Issues and Troubleshooting
+1. Application Doesn't Load
+Cause: The local server is not configured to allow remote access.
+
+Solution:
+
+Ensure you modified the Apache configuration file as described earlier.
+
+Restart Apache after making changes.
+
+2. Connection Timed Out
+Cause: The hosting laptop's firewall is blocking incoming connections.
+
+Solution:
+
+On the hosting laptop, allow incoming connections on port 80 (HTTP) through the firewall.
+
+Windows:
+
+Open "Windows Defender Firewall" > "Advanced Settings".
+
+Create a new inbound rule to allow port 80.
+
+macOS:
+
+Go to "System Preferences" > "Security & Privacy" > "Firewall".
+
+Allow incoming connections for Apache or your local server.
+
+3. "This Site Can't Be Reached"
+Cause: The IP address or project folder name is incorrect.
+
+Solution:
+
+Double-check the IP address of the hosting laptop.
+
+Ensure the project folder name is correct and matches the folder name in htdocs or www.
+
+4. Database Connection Issues
+Cause: The database credentials in db.php are incorrect or the database is not accessible remotely.
+
+Solution:
+
+Ensure the database credentials in db.php match the local server's database settings.
+
+If using MySQL, ensure remote access is allowed:
+
+Open phpMyAdmin.
+
+Go to the User Accounts tab.
+
+Edit the root user and set the Host to Any Host or %.
+
+5. JavaScript or CSS Not Loading
+Cause: Relative paths in your HTML/CSS/JS files are incorrect.
+
+Solution:
+
+Use absolute paths for assets (e.g., /your-project-folder/css/styles.css instead of css/styles.css).
+
+Example of a Working Setup
+Hosting Laptop
+IP Address: 192.168.1.100
+
+Project Folder: job-platform
+
+Local Server: XAMPP
+
+Accessing the Application
+On the hosting laptop: http://localhost/job-platform
+
+On another laptop: http://192.168.1.100/job-platform
+
+Alternative: Use a Live Server
+If you want to avoid network configuration issues, you can deploy your application to a live server (e.g., using free hosting services like 000webhost or InfinityFree). This will make your application accessible over the internet with a public URL.
+
+Final Notes
+Ensure both laptops are connected to the same network (e.g., the same Wi-Fi).
+
+If you still encounter issues, let me know the specific error message or behavior, and I’ll help you troubleshoot further!
+
+the developer is not able to reply to client in chatbox
+If the developer is unable to reply to the client in the chatbox, there could be several reasons for this issue. Below, I'll guide you through debugging and fixing the problem step by step.
+
+Possible Causes
+Incorrect Message Handling:
+
+The chat logic might not be correctly handling messages sent by the developer.
+
+Database Issues:
+
+The messages table might not be updated correctly when the developer sends a message.
+
+Role-Based Restrictions:
+
+The chat logic might not be checking the roles (client vs. developer) properly.
+
+JavaScript or Frontend Issues:
+
+The chat interface might not be updating dynamically or might have JavaScript errors.
+
+Session or Authentication Issues:
+
+The developer's session might not be properly authenticated, preventing them from sending messages.
+
+Step-by-Step Debugging
+1. Check the Chat Logic
+Ensure the chat.php file correctly handles messages from both clients and developers. Here's an example implementation:
+
+php
+Copy
+<?php
+session_start();
+include 'includes/auth.php'; // Ensure the user is logged in
+include 'db.php';
+
+$receiver_id = $_GET['receiver_id'];
+$user_id = $_SESSION['user_id'];
+
+// Handle message submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $message = $_POST['message'];
+
+    // Insert the message into the database
+    $stmt = $conn->prepare("INSERT INTO messages (sender_id, receiver_id, message) VALUES (?, ?, ?)");
+    $stmt->bind_param("iis", $user_id, $receiver_id, $message);
+    $stmt->execute();
+    $stmt->close();
+}
+
+// Fetch chat history
+$stmt = $conn->prepare("SELECT * FROM messages WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?) ORDER BY sent_at ASC");
+$stmt->bind_param("iiii", $user_id, $receiver_id, $receiver_id, $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="chat-container">
+        <h2>Chat with <?= $receiver_id === $_SESSION['user_id'] ? 'Yourself' : 'User ' . $receiver_id ?></h2>
+        <div id="chat-box">
+            <?php while ($row = $result->fetch_assoc()): ?>
+                <div class="message <?= $row['sender_id'] === $user_id ? 'sent' : 'received' ?>">
+                    <?= htmlspecialchars($row['message']) ?>
+                </div>
+            <?php endwhile; ?>
+        </div>
+        <form method="POST" action="chat.php?receiver_id=<?= $receiver_id ?>">
+            <textarea name="message" placeholder="Type your message..." required></textarea>
+            <button type="submit">Send</button>
+        </form>
+    </div>
+</body>
+</html>
+2. Check the Database
+Ensure the messages table is correctly structured and updated when a message is sent. The table should have the following structure:
+
+sql
+Copy
+CREATE TABLE messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    sender_id INT NOT NULL,
+    receiver_id INT NOT NULL,
+    message TEXT NOT NULL,
+    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+);
+Verify that messages are being inserted into the messages table when the developer sends a message.
+
+3. Check Role-Based Logic
+Ensure the chat logic does not restrict developers from sending messages. For example, the following code should allow both clients and developers to send messages:
+
+php
+Copy
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $message = $_POST['message'];
+
+    // Insert the message into the database
+    $stmt = $conn->prepare("INSERT INTO messages (sender_id, receiver_id, message) VALUES (?, ?, ?)");
+    $stmt->bind_param("iis", $user_id, $receiver_id, $message);
+    $stmt->execute();
+    $stmt->close();
+}
+4. Check the Chat Interface
+Ensure the chat interface is correctly displaying messages and allowing the developer to send messages. For example:
+
+html
+Copy
+<div class="chat-container">
+    <h2>Chat with <?= $receiver_id === $_SESSION['user_id'] ? 'Yourself' : 'User ' . $receiver_id ?></h2>
+    <div id="chat-box">
+        <?php while ($row = $result->fetch_assoc()): ?>
+            <div class="message <?= $row['sender_id'] === $user_id ? 'sent' : 'received' ?>">
+                <?= htmlspecialchars($row['message']) ?>
+            </div>
+        <?php endwhile; ?>
+    </div>
+    <form method="POST" action="chat.php?receiver_id=<?= $receiver_id ?>">
+        <textarea name="message" placeholder="Type your message..." required></textarea>
+        <button type="submit">Send</button>
+    </form>
+</div>
+Run HTML
+5. Debugging with var_dump() or echo
+Add debugging statements to check if the developer's message is being processed correctly. For example:
+
+php
+Copy
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $message = $_POST['message'];
+    var_dump($message); // Debug: Check the message content
+    var_dump($user_id); // Debug: Check the sender ID
+    var_dump($receiver_id); // Debug: Check the receiver ID
+
+    $stmt = $conn->prepare("INSERT INTO messages (sender_id, receiver_id, message) VALUES (?, ?, ?)");
+    $stmt->bind_param("iis", $user_id, $receiver_id, $message);
+    if ($stmt->execute()) {
+        echo "Message sent successfully!"; // Debug: Check if the query executed
+    } else {
+        echo "Failed to send message."; // Debug: Check for query errors
+    }
+    $stmt->close();
+}
+6. Check for JavaScript Errors
+If the chat interface uses JavaScript for real-time updates, open the browser's developer console (press F12) and check for any errors.
+
+Final Fixes
+Updated chat.php
+Ensure the chat.php file correctly handles messages from both clients and developers:
+
+php
+Copy
+<?php
+session_start();
+include 'includes/auth.php'; // Ensure the user is logged in
+include 'db.php';
+
+$receiver_id = $_GET['receiver_id'];
+$user_id = $_SESSION['user_id'];
+
+// Handle message submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $message = $_POST['message'];
+
+    // Insert the message into the database
+    $stmt = $conn->prepare("INSERT INTO messages (sender_id, receiver_id, message) VALUES (?, ?, ?)");
+    $stmt->bind_param("iis", $user_id, $receiver_id, $message);
+    $stmt->execute();
+    $stmt->close();
+}
+
+// Fetch chat history
+$stmt = $conn->prepare("SELECT * FROM messages WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?) ORDER BY sent_at ASC");
+$stmt->bind_param("iiii", $user_id, $receiver_id, $receiver_id, $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="chat-container">
+        <h2>Chat with <?= $receiver_id === $_SESSION['user_id'] ? 'Yourself' : 'User ' . $receiver_id ?></h2>
+        <div id="chat-box">
+            <?php while ($row = $result->fetch_assoc()): ?>
+                <div class="message <?= $row['sender_id'] === $user_id ? 'sent' : 'received' ?>">
+                    <?= htmlspecialchars($row['message']) ?>
+                </div>
+            <?php endwhile; ?>
+        </div>
+        <form method="POST" action="chat.php?receiver_id=<?= $receiver_id ?>">
+            <textarea name="message" placeholder="Type your message..." required></textarea>
+            <button type="submit">Send</button>
+        </form>
+    </div>
+</body>
+</html>
+Testing
+Log in as a developer.
+
+Open the chatbox with a client.
+
+Send a message and verify that it appears in the chat history.
+
+Check the database to ensure the message is recorded.

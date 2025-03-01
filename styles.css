@@ -1,0 +1,90 @@
+/* Admin Container */
+.admin-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Table Styling */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+table th, table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #A888B5;
+}
+
+table th {
+    background-color: #8174A0;
+    color: #ffffff;
+}
+
+/* Button Styling */
+.btn-edit, .btn-delete {
+    padding: 5px 10px;
+    border-radius: 5px;
+    text-decoration: none;
+    color: #ffffff;
+    font-size: 14px;
+}
+
+.btn-edit {
+    background-color: #28a745; /* Green for edit */
+}
+
+.btn-delete {
+    background-color: #dc3545; /* Red for delete */
+}
+
+.btn-edit:hover, .btn-delete:hover {
+    opacity: 0.8;
+}
+
+/* Edit Container */
+.edit-container {
+    max-width: 500px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.edit-container label {
+    display: block;
+    margin-bottom: 5px;
+    color: #8174A0;
+}
+
+.edit-container input, .edit-container select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #A888B5;
+    border-radius: 5px;
+    font-size: 16px;
+    color: #8174A0;
+    background-color: #f4f4f9;
+}
+
+.edit-container button {
+    background-color: #8174A0;
+    color: #ffffff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.edit-container button:hover {
+    background-color: #A888B5;
+}
